@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="500"
+   height="500"
+   viewBox="0 0 132.29167 132.29167"
+   version="1.1"
+   id="svg1"
+   sodipodi:docname="main.svg"
+   inkscape:version="1.4 (86a8ad7, 2024-10-11)"
+   inkscape:label="fdsfds"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#505050"
+     bordercolor="#eeeeee"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="1.0041055"
+     inkscape:cx="257.44306"
+     inkscape:cy="268.39808"
+     inkscape:current-layer="g3">
+    <inkscape:page
+       x="0"
+       y="0"
+       width="132.29167"
+       height="132.29167"
+       id="page1"
+       margin="0"
+       bleed="0" />
+  </sodipodi:namedview>
+  <defs
+     id="defs1">
+    <linearGradient
+       id="linearGradient2">
+      <stop
+         style="stop-color:#6e00ff;stop-opacity:1;"
+         offset="0"
+         id="stop2" />
+      <stop
+         style="stop-color:#ffffff;stop-opacity:0;"
+         offset="1"
+         id="stop3" />
+    </linearGradient>
+    <radialGradient
+       xlink:href="#linearGradient2"
+       id="radialGradient3"
+       cx="93.889893"
+       cy="120.60973"
+       fx="93.889893"
+       fy="120.60973"
+       r="80.092361"
+       gradientTransform="matrix(1,0,0,0.99926873,0,0.08819852)"
+       gradientUnits="userSpaceOnUse" />
+  </defs>
+  <g
+     id="g4"
+     inkscape:label="_g4">
+    <rect
+       style="fill:#9cc7dc;stroke:#ffffff;stroke-width:4"
+       id="rect2"
+       width="34.283562"
+       height="49.375782"
+       x="87.944794"
+       y="75.833755" />
+    <rect
+       style="fill:#cccccc;stroke:#ffffff;stroke-width:4"
+       id="rect3"
+       width="13.415307"
+       height="23.290464"
+       x="97.260971"
+       y="87.572144" />
+  </g>
+  <g
+     id="g3"
+     inkscape:label="_g3">
+    <rect
+       style="fill:#9cc7dc;stroke:#ffffff;stroke-width:4"
+       id="rect1"
+       width="14.346927"
+       height="14.719573"
+       x="13.974278"
+       y="12.297365" />
+    <ellipse
+       style="fill:#c83737;stroke:#ffffff;stroke-width:4"
+       id="path3"
+       cx="88.876411"
+       cy="34.376724"
+       rx="22.545168"
+       ry="10.713614" />
+  </g>
+  <g
+     id="g5"
+     inkscape:label="_g5">
+    <rect
+       style="fill:#abc837;stroke:#ffffff;stroke-width:4"
+       id="rect4"
+       width="22.731493"
+       height="23.476788"
+       x="12.111041"
+       y="91.298622"
+       ry="6.8939772" />
+  </g>
+</svg>

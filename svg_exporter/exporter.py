@@ -122,8 +122,8 @@ svg_path = 'main.svg'
 split_svg_folder = 'split_svg'
 bmp_folder = "export"
 offset_file_path = "positions.txt"
-width = 200  
-height = 200
+width = 240  
+height = 240
 transparent_threshold= 10
 
 list_results = split_svg_by_groups(svg_path, split_svg_folder)

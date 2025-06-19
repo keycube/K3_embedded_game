@@ -6,18 +6,19 @@ from pathlib import PurePath
 from lxml import etree
 import cairosvg
 
-def render_svg_to_png(svg_path, output_folder, offset_file_path, width, height, transparent_threshold=100):
+def render_svg_to_png(svg_path, output_folder, data_filepath, width, height, no_bmp, transparent_threshold=100):
 	os.makedirs(output_folder, exist_ok=True)
 
-	if (svg_path[0] == "$"):
-		with open(offset_file_path, "a") as f:
+	if (svg_path[0] == "$" or svg_path[0] == "?"):
+		with open(data_filepath, "a") as f:
 			f.write(svg_path + "\n")
 		return
+		
 
 	path_split = PurePath(svg_path).parts
+	subfolder = path_split[1]
 
 	filename_without_ext = os.path.splitext(os.path.basename(svg_path))[0]
-	subfolder = path_split[1]
 
 	png_data = BytesIO()
 	cairosvg.svg2png(url=svg_path, write_to=png_data, output_width=width, output_height=height)
@@ -73,21 +74,32 @@ def render_svg_to_png(svg_path, output_folder, offset_file_path, width, height, 
 	if min_x <= max_x and min_y <= max_y:
 		img_rgb = img_rgb.crop((min_x, min_y, max_x + 1, max_y + 1))
 
-	with open(offset_file_path, "a") as f:
+	# reconvert to palette mode to keep a 8 bit depth
+	img_final = img_rgb.convert("P", palette=pal_img, colors=3)
+
+	with open(data_filepath, "a") as f:
 		f.write(f"{filename_without_ext} {min_x} {min_y}\n")
+
+	if (no_bmp):
+		return
 
 	# Conversion finale en RGB pour BMP
 	final_file = f'{output_folder}/{subfolder}/{filename_without_ext}.bmp'
 	print("Image générée : " + final_file)
-	img_rgb.save(final_file, format="BMP")
+	img_final.save(final_file, format="BMP")
 
-def split_svg_by_groups(input_svg_path, output_folder):
+
+
+
+
+
+def split_svg_by_groups(input_svg_filepath, output_folder):
 	# Créer le dossier de sortie si besoin
 	os.makedirs(output_folder, exist_ok=True)
 
 	# Charger le SVG d'origine
 	parser = etree.XMLParser(remove_blank_text=True)
-	tree = etree.parse(input_svg_path, parser)
+	tree = etree.parse(input_svg_filepath, parser)
 	root = tree.getroot()
 
 	nsmap = root.nsmap
@@ -103,24 +115,25 @@ def split_svg_by_groups(input_svg_path, output_folder):
 
 	print(f"Trouvé {len(groups)} groupes avec un inkscapelabel.")
 	 
-	# contains all generated svg's filename formated as split_svg/groupname.svg, except tiles, which are store in lst_tile
+	# contains all generated svg's filename formated as split_svg/groupname.svg, except tiles, 
+	# text_position, and stamps, which are stored in the following lists
 	lst_classic_images = [] 
 
 	# list of the filename of tiles, formated as split_svg/id.svg
 	lst_tile = [] 
 
-	# key is the name of the file, value is the number of instance using this stamp as an image
+	# contains all exported svg, labeled as 'text position' (with _?group_name)
+	lst_text_position = ["?pos_only"] # add header entry
+
+	# key is the group name (without '_!'), value is a list of filepath of each split svg using this stamp name
 	dict_stamp = {} 
 
-	 # key is the name of the text
-	dict_text = {}
 
 	last_tile_layer = ""
 	i = 0
 	for group in groups:
 		group_id = group.attrib[label_attr]
 
-		filename_no_ext = f"{group_id[1:]}"
 
 		if (group_id[0] != '_'):
 			# skip group not labeled as export
@@ -131,38 +144,64 @@ def split_svg_by_groups(input_svg_path, output_folder):
 			layer = layer.getparent()
 		layer_name = layer.attrib.get(label_attr, 'Unnamed Layer') if layer is not None else 'No Layer'
 
-		output_path = os.path.join(output_folder + "/" + layer_name, filename_no_ext + ".svg")
+		group_name_simple = group_id[1:] # removes only the '_' token
+		group_name_token = group_id[2:] # also removes the second token ('!', '?' or '$')
+		
+		split_svg_export_path = output_folder + "/" + layer_name + "/"
+		svg_ext = '.svg'
 
-		key = group_id[2:]
 		if (group_id[1] == '!'):
-			if (key in dict_stamp):
-				pass
-			else:
-				dict_stamp[key] = []
-				#dict_stamp[key].append()
+
+			if (group_name_token not in dict_stamp):
+				dict_stamp[group_name_token] = []
+
+			stamp = dict_stamp[group_name_token]
+
+			filepath = split_svg_export_path + group_name_token + str(len(stamp)) + svg_ext
+			stamp.append(filepath)
+			extract_group(root, group, filepath)
 
 		elif (group_id[1] == '?'):
-			pass
+			# no rendered bitmap, only position (text_position)
+			# still exported as svg to get the position as rendered bitmap
+
+			filepath = split_svg_export_path + group_name_token + svg_ext
+			extract_group(root, group, filepath)
+			lst_text_position.append(filepath)
+
+
 		elif (group_id[1] == '$'):
+			# ordered image (tiles)
 			try:
-				int(key)
+				int(group_name_token)
 			except:
-				print(f"error : tile group {group_id} must contain digits only, key = |{key}|")
-			output_path = os.path.join(output_folder + "/" + layer_name, key + ".svg")
-			extract_group(root, group, output_path)
+				print(f"error : tile group {group_id} must contain digits only, key = |{group_name_token}|")
+
+			filepath = split_svg_export_path + group_name_token + svg_ext
+
+			extract_group(root, group, filepath)
+
 			if (layer_name != last_tile_layer):
+				# insert special entry to write categories' header in the data file
 				last_tile_layer = layer_name
 				lst_tile.append("$"+layer_name)
-			lst_tile.append(output_path)
+
+			lst_tile.append(filepath)
 
 		else:
-			extract_group(root, group, output_path)
-			lst_classic_images.append(output_path)
-
+			#classic images
+			filepath = split_svg_export_path + group_name_simple + svg_ext
+			extract_group(root, group, filepath)
+			lst_classic_images.append(filepath)
 	
-	return (lst_classic_images, lst_tile, dict_stamp, dict_text)
+	return (lst_classic_images, lst_tile, dict_stamp, lst_text_position)
+
+
+
+
 
 def extract_group(root, group, output_path):
+
 	# Créer une nouvelle racine SVG avec même dimensions et viewBox
 	new_root = copy.deepcopy(root)
 	for elem in list(new_root):
@@ -176,33 +215,70 @@ def extract_group(root, group, output_path):
 		f.write(etree.tostring(new_root, pretty_print=True, xml_declaration=True, encoding="UTF-8"))
 
 
-# Exemple d'utilisation
+def create_folders_from_layers(svg_path, lst_root):
+	# Préparer le parser
+	parser = etree.XMLParser(remove_blank_text=True)
+	tree = etree.parse(svg_path, parser)
+	root = tree.getroot()
+
+	# Namespace
+	nsmap = root.nsmap
+	if None in nsmap:
+		nsmap['svg'] = nsmap.pop(None)
+	inkscape_ns = nsmap.get('inkscape', 'http://www.inkscape.org/namespaces/inkscape')
+	label_attr = f'{{{inkscape_ns}}}label'
+	groupmode_attr = f'{{{inkscape_ns}}}groupmode'
+
+	# Trouver tous les layers
+	layers = [g for g in root.findall('.//svg:g', namespaces=nsmap)
+			  if g.attrib.get(groupmode_attr) == 'layer']
+
+	# Créer les dossiers
+	for layer in layers:
+		layer_name = layer.attrib.get(label_attr, 'Unnamed_Layer')
+		for root in lst_root:
+			folder_path = os.path.join(root, layer_name)
+			os.makedirs(folder_path, exist_ok=True)
+
+
 svg_path = 'main.svg'
 split_svg_folder = 'split_svg'
 bmp_folder = "export"
-offset_file_path = "positions.txt"
+data_filepath = "positions.txt"
 width = 240  
 height = 240
 transparent_threshold= 10
 
-os.makedirs(split_svg_folder + "/" + "cross", exist_ok=True)
-os.makedirs(split_svg_folder + "/" + "filled", exist_ok=True)
-os.makedirs(split_svg_folder + "/" + "other", exist_ok=True)
+create_folders_from_layers(svg_path, [split_svg_folder, bmp_folder])
+open(data_filepath, "w").close() # clear the data file
 
-os.makedirs(bmp_folder + "/" + "cross", exist_ok=True)
-os.makedirs(bmp_folder + "/" + "filled", exist_ok=True)
-os.makedirs(bmp_folder + "/" + "other", exist_ok=True)
+lst_simple_image, lst_tile, dict_stamp, lst_text = split_svg_by_groups(svg_path, split_svg_folder)
 
-lst_results, lst_tile, dict_stamp, dict_text = split_svg_by_groups(svg_path, split_svg_folder)
-with open(offset_file_path, "w") as f:
-	pass
-	# clear the data file
-
+#tiles
 for tile in lst_tile:
-	render_svg_to_png(tile, bmp_folder, offset_file_path, width, height, transparent_threshold)
+	render_svg_to_png(tile, bmp_folder, data_filepath, width, height, False, transparent_threshold)
+
+#textpos
+if (len(lst_text) >= 1):
+	for text in lst_text:
+		print("position generated for ", text)
+		render_svg_to_png(text, bmp_folder, data_filepath, width, height, True, transparent_threshold)
+
+#stamps
+for key in dict_stamp.keys():
+	with open(data_filepath, "a") as f:
+		f.write(f"!{key}\n")
+	
+	stamp = dict_stamp[key]
+	render_svg_to_png(stamp[0], bmp_folder, data_filepath, width, height, False, transparent_threshold)
+
+	for i in range(1, len(stamp)):
+		render_svg_to_png(stamp[i], bmp_folder, data_filepath, width, height, True, transparent_threshold)
 
 
-with open(offset_file_path, "a") as f:
+#simple images
+with open(data_filepath, "a") as f:
 	f.write("=other\n")
-for path in lst_results:
-	render_svg_to_png(path, bmp_folder, offset_file_path, width, height, transparent_threshold)
+
+for path in lst_simple_image:
+	render_svg_to_png(path, bmp_folder, data_filepath, width, height, False, transparent_threshold)

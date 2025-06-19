@@ -2,12 +2,22 @@ import os
 import copy
 from io import BytesIO
 from PIL import Image, ImageEnhance, ImageFilter
+from pathlib import PurePath
 from lxml import etree
 import cairosvg
 
 def render_svg_to_png(svg_path, output_folder, offset_file_path, width, height, transparent_threshold=100):
 	os.makedirs(output_folder, exist_ok=True)
+
+	if (svg_path[0] == "$"):
+		with open(offset_file_path, "a") as f:
+			f.write(svg_path + "\n")
+		return
+
+	path_split = PurePath(svg_path).parts
+
 	filename_without_ext = os.path.splitext(os.path.basename(svg_path))[0]
+	subfolder = path_split[1]
 
 	png_data = BytesIO()
 	cairosvg.svg2png(url=svg_path, write_to=png_data, output_width=width, output_height=height)
@@ -67,7 +77,9 @@ def render_svg_to_png(svg_path, output_folder, offset_file_path, width, height, 
 		f.write(f"{filename_without_ext} {min_x} {min_y}\n")
 
 	# Conversion finale en RGB pour BMP
-	img_rgb.save(f'{output_folder}/{filename_without_ext}.bmp', format="BMP")
+	final_file = f'{output_folder}/{subfolder}/{filename_without_ext}.bmp'
+	print("Image générée : " + final_file)
+	img_rgb.save(final_file, format="BMP")
 
 def split_svg_by_groups(input_svg_path, output_folder):
 	# Créer le dossier de sortie si besoin
@@ -91,30 +103,77 @@ def split_svg_by_groups(input_svg_path, output_folder):
 
 	print(f"Trouvé {len(groups)} groupes avec un inkscapelabel.")
 	 
-	list_results = []
+	# contains all generated svg's filename formated as split_svg/groupname.svg, except tiles, which are store in lst_tile
+	lst_classic_images = [] 
+
+	# list of the filename of tiles, formated as split_svg/id.svg
+	lst_tile = [] 
+
+	# key is the name of the file, value is the number of instance using this stamp as an image
+	dict_stamp = {} 
+
+	 # key is the name of the text
+	dict_text = {}
+
+	last_tile_layer = ""
 	i = 0
 	for group in groups:
 		group_id = group.attrib[label_attr]
 
-		if (group_id[0] != '_'):
-			continue
-		# Créer une nouvelle racine SVG avec même dimensions et viewBox
-		new_root = copy.deepcopy(root)
-		for elem in list(new_root):
-			new_root.remove(elem)
-
-		# Insérer uniquement le groupe courant
-		new_root.append(copy.deepcopy(group))
-
-		# Écrire le fichier SVG correspondant
 		filename_no_ext = f"{group_id[1:]}"
-		output_path = os.path.join(output_folder, filename_no_ext + ".svg")
-		with open(output_path, "wb") as f:
-			f.write(etree.tostring(new_root, pretty_print=True, xml_declaration=True, encoding="UTF-8"))
 
-		print(f"Fichier généré : {output_path}")
-		list_results.append(output_path)
-	return list_results
+		if (group_id[0] != '_'):
+			# skip group not labeled as export
+			continue
+
+		layer = group
+		while layer is not None and layer.attrib.get(f'{{{inkscape_ns}}}groupmode') != 'layer':
+			layer = layer.getparent()
+		layer_name = layer.attrib.get(label_attr, 'Unnamed Layer') if layer is not None else 'No Layer'
+
+		output_path = os.path.join(output_folder + "/" + layer_name, filename_no_ext + ".svg")
+
+		key = group_id[2:]
+		if (group_id[1] == '!'):
+			if (key in dict_stamp):
+				pass
+			else:
+				dict_stamp[key] = []
+				#dict_stamp[key].append()
+
+		elif (group_id[1] == '?'):
+			pass
+		elif (group_id[1] == '$'):
+			try:
+				int(key)
+			except:
+				print(f"error : tile group {group_id} must contain digits only, key = |{key}|")
+			output_path = os.path.join(output_folder + "/" + layer_name, key + ".svg")
+			extract_group(root, group, output_path)
+			if (layer_name != last_tile_layer):
+				last_tile_layer = layer_name
+				lst_tile.append("$"+layer_name)
+			lst_tile.append(output_path)
+
+		else:
+			extract_group(root, group, output_path)
+			lst_classic_images.append(output_path)
+
+	
+	return (lst_classic_images, lst_tile, dict_stamp, dict_text)
+
+def extract_group(root, group, output_path):
+	# Créer une nouvelle racine SVG avec même dimensions et viewBox
+	new_root = copy.deepcopy(root)
+	for elem in list(new_root):
+		new_root.remove(elem)
+
+	# Insérer uniquement le groupe courant
+	new_root.append(copy.deepcopy(group))
+
+	print(f"Fichier généré : {output_path}")
+	with open(output_path, "wb") as f:
+		f.write(etree.tostring(new_root, pretty_print=True, xml_declaration=True, encoding="UTF-8"))
 
 
 # Exemple d'utilisation
@@ -126,8 +185,24 @@ width = 240
 height = 240
 transparent_threshold= 10
 
-list_results = split_svg_by_groups(svg_path, split_svg_folder)
+os.makedirs(split_svg_folder + "/" + "cross", exist_ok=True)
+os.makedirs(split_svg_folder + "/" + "filled", exist_ok=True)
+os.makedirs(split_svg_folder + "/" + "other", exist_ok=True)
+
+os.makedirs(bmp_folder + "/" + "cross", exist_ok=True)
+os.makedirs(bmp_folder + "/" + "filled", exist_ok=True)
+os.makedirs(bmp_folder + "/" + "other", exist_ok=True)
+
+lst_results, lst_tile, dict_stamp, dict_text = split_svg_by_groups(svg_path, split_svg_folder)
 with open(offset_file_path, "w") as f:
 	pass
-for path in list_results:
+	# clear the data file
+
+for tile in lst_tile:
+	render_svg_to_png(tile, bmp_folder, offset_file_path, width, height, transparent_threshold)
+
+
+with open(offset_file_path, "a") as f:
+	f.write("=other\n")
+for path in lst_results:
 	render_svg_to_png(path, bmp_folder, offset_file_path, width, height, transparent_threshold)

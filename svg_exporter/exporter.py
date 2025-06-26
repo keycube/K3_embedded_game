@@ -255,27 +255,6 @@ open(data_filepath, "w").close() # clear the data file
 lst_simple_image, lst_tile, dict_stamp, lst_text = split_svg_by_groups(svg_path, split_svg_folder)
 
 
-# !!! HARDCODED CASE !!!
-
-lst_tile_headers = []
-
-for i in range(len(lst_tile)-1, 0):
-	svg = lst_tile[i]
-	if (svg[i] == "$"):
-		lst_tile_headers.append(svg)
-		del lst_tile[i]
-
-lst_tile_headers.reverse()
-header_str = "$"
-
-for header in lst_tile_headers:
-	header_str += f" {lst_tile_headers[1:]}"
-with open(data_filepath, "a") as f:
-	f.write(header_str + "\n")
-
-# !!! HARDCODED CASE !!!
-
-
 #tiles
 for tile in lst_tile:
 	render_svg_to_png(tile, bmp_folder, data_filepath, width, height, False, transparent_threshold)

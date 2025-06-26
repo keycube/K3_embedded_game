@@ -9,59 +9,59 @@ import cairosvg
 def render_svg_to_png(svg_path, output_folder, data_filepath, width, height, no_bmp, transparent_threshold=100):
 	os.makedirs(output_folder, exist_ok=True)
 
+	# Special case: skip and log if path starts with $ or ?
 	if (svg_path[0] == "$" or svg_path[0] == "?"):
 		with open(data_filepath, "a") as f:
 			f.write(svg_path + "\n")
 		return
 		
-
+	# Extract filename and subfolder from the path
 	path_split = PurePath(svg_path).parts
 	subfolder = path_split[1]
-
 	filename_without_ext = os.path.splitext(os.path.basename(svg_path))[0]
 
+	# Rasterize the SVG using cairosvg into a PNG in memory
 	png_data = BytesIO()
 	cairosvg.svg2png(url=svg_path, write_to=png_data, output_width=width, output_height=height)
 
-	# Conversion en niveaux de gris puis RGB, et récupération de l'alpha
+	# Convert to grayscale (L), then to RGB, and extract the alpha channel separately
 	img = Image.open(png_data).convert("L").convert("RGB")
 	alpha = Image.open(png_data).convert("RGBA").getchannel("A")
 
-	# Déclaration de la palette (noir, blanc, rouge réservé pour les transparents)
 	palette = [
-		255, 0, 0,       # index 0 : rouge (qu'on utilisera après pour transparence)
-		255, 255, 255,   # index 1 : blanc
-		0, 0, 0          # index 2 : noir
+		255, 0, 0,       # index 0 : red (used later to mark transparent zones)
+		255, 255, 255,   # index 1 : white
+		0, 0, 0          # index 2 : black
 	] + [0]*(768-9)
 
 	pal_img = Image.new("P", (1,1))
 	pal_img.putpalette(palette)
 
-	# Quantization avec dithering, vers 3 couleurs (indice 0, 1 et 2)
+	# Dithering
 	img = img.quantize(3, palette=pal_img, dither=Image.FLOYDSTEINBERG)
 
-	# Remplacement des pixels transparents (alpha=0) par l'index rouge (index 0)
-
+	# Crop to bounding box to remove excess transparent padding
 	bbox = img.getbbox()
 	if bbox:
 		img = img.crop(bbox)
 	else:
-		# Image entièrement transparente
 		img = img
 
 
+	# Replace pixels with low alpha by red index (0 in palette)
 	pixels = img.load()
 	for y in range(img.height):
 		for x in range(img.width):
 			if alpha.getpixel((x, y)) <= transparent_threshold:
-				pixels[x, y] = 0  # index rouge
+				pixels[x, y] = 0  # red index
+
 
 	img_rgb = img.convert("RGB")
-
 	red = (255, 0, 0)
 	min_x, min_y = img_rgb.width, img_rgb.height
 	max_x, max_y = 0, 0
 
+	# Calculate bounding box of all non-red pixels
 	for y in range(img_rgb.height):
 		for x in range(img_rgb.width):
 			if img_rgb.getpixel((x, y)) != red:
@@ -70,20 +70,20 @@ def render_svg_to_png(svg_path, output_folder, data_filepath, width, height, no_
 				max_x = max(max_x, x)
 				max_y = max(max_y, y)
 
-	# Si on a trouvé au moins un pixel non rouge
 	if min_x <= max_x and min_y <= max_y:
 		img_rgb = img_rgb.crop((min_x, min_y, max_x + 1, max_y + 1))
 
 	# reconvert to palette mode to keep a 8 bit depth
 	img_final = img_rgb.convert("P", palette=pal_img, colors=3)
 
+	# Store position in data file
 	with open(data_filepath, "a") as f:
 		f.write(f"{filename_without_ext} {min_x} {min_y}\n")
 
 	if (no_bmp):
 		return
 
-	# Conversion finale en RGB pour BMP
+	# CSave to BMP
 	final_file = f'{output_folder}/{subfolder}/{filename_without_ext}.bmp'
 	print("Image générée : " + final_file)
 	img_final.save(final_file, format="BMP")
@@ -92,12 +92,11 @@ def render_svg_to_png(svg_path, output_folder, data_filepath, width, height, no_
 
 
 
-
+# Split one SVG into individual groups and export them into separate SVG files
 def split_svg_by_groups(input_svg_filepath, output_folder):
-	# Créer le dossier de sortie si besoin
 	os.makedirs(output_folder, exist_ok=True)
 
-	# Charger le SVG d'origine
+	# Parse SVG file
 	parser = etree.XMLParser(remove_blank_text=True)
 	tree = etree.parse(input_svg_filepath, parser)
 	root = tree.getroot()
@@ -110,7 +109,7 @@ def split_svg_by_groups(input_svg_filepath, output_folder):
 	label_attr = f'{{{inkscape_ns}}}label'
 	print(label_attr)
 
-	# Chercher tous les groupes ayant un ID
+	# Find all groups with a label attribute
 	groups = [g for g in root.findall('.//svg:g', namespaces=nsmap) if label_attr in g.attrib]
 
 	print(f"Trouvé {len(groups)} groupes avec un inkscapelabel.")
@@ -139,6 +138,7 @@ def split_svg_by_groups(input_svg_filepath, output_folder):
 			# skip group not labeled as export
 			continue
 
+		# Find containing layer
 		layer = group
 		while layer is not None and layer.attrib.get(f'{{{inkscape_ns}}}groupmode') != 'layer':
 			layer = layer.getparent()
@@ -199,7 +199,7 @@ def split_svg_by_groups(input_svg_filepath, output_folder):
 
 
 
-
+# Export a group into its own SVG file, keeping the root structure
 def extract_group(root, group, output_path):
 
 	# Créer une nouvelle racine SVG avec même dimensions et viewBox
@@ -214,14 +214,12 @@ def extract_group(root, group, output_path):
 	with open(output_path, "wb") as f:
 		f.write(etree.tostring(new_root, pretty_print=True, xml_declaration=True, encoding="UTF-8"))
 
-
+# Create folders named after the SVG layers inside each given root
 def create_folders_from_layers(svg_path, lst_root):
-	# Préparer le parser
 	parser = etree.XMLParser(remove_blank_text=True)
 	tree = etree.parse(svg_path, parser)
 	root = tree.getroot()
 
-	# Namespace
 	nsmap = root.nsmap
 	if None in nsmap:
 		nsmap['svg'] = nsmap.pop(None)
@@ -229,11 +227,9 @@ def create_folders_from_layers(svg_path, lst_root):
 	label_attr = f'{{{inkscape_ns}}}label'
 	groupmode_attr = f'{{{inkscape_ns}}}groupmode'
 
-	# Trouver tous les layers
 	layers = [g for g in root.findall('.//svg:g', namespaces=nsmap)
 			  if g.attrib.get(groupmode_attr) == 'layer']
 
-	# Créer les dossiers
 	for layer in layers:
 		layer_name = layer.attrib.get(label_attr, 'Unnamed_Layer')
 		for root in lst_root:
